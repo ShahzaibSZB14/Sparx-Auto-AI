@@ -538,12 +538,13 @@ function executeGeminiPrompt(tabId, prompt, settings, requestId, images, provide
                         throw new Error('Gemini input box not found');
                     }
 
+                    if (!setPrompt(input, userPrompt)) {
+                        throw new Error('Failed to set AI prompt');
+                    }
+
                     await attachImagesToAi(userImages);
 
                     const before = codeSnapshots();
-                    if (!setPrompt(input, userPrompt)) {
-                        throw new Error('Failed to set Gemini prompt');
-                    }
 
                     let sent = false;
                     for (let i = 0; i < Math.max(1, Number(localSettings.submitAttemptCount || 12)); i += 1) {

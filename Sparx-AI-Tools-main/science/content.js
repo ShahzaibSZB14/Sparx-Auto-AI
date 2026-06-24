@@ -788,8 +788,10 @@
 
     function getCleanCardText(card) {
         if (!card) return "";
+        const content = card.querySelector('[class*="_Content_"]');
+        if (content) return (content.innerText || content.textContent || "").replace(/\s+/g, " ").trim();
         const clone = card.cloneNode(true);
-        clone.querySelectorAll("svg, button, input, [class*='_DragHandle_'], [class*='_ButtonsContainer_']").forEach((el) => el.remove());
+        clone.querySelectorAll("svg, button, input, [class*='_ButtonsContainer_']").forEach((el) => el.remove());
         return (clone.innerText || clone.textContent || "").replace(/\s+/g, " ").trim();
     }
 
@@ -828,8 +830,19 @@
         return true;
     }
 
+    function findSortingItemByLabel(items, targetLabel) {
+        const target = normalizeMatchText(targetLabel);
+        if (!target) return null;
+        let match = items.find((item) => normalizeMatchText(item.label) === target);
+        if (match) return match;
+        match = items.find((item) => normalizeMatchText(item.label).includes(target) || target.includes(normalizeMatchText(item.label)));
+        if (match) return match;
+        return null;
+    }
+
     async function fillSorting(inputDesc, answerText) {
         const desired = parseSortingAnswer(answerText);
+        console.log("[SAI] sorting desired order:", desired, "items:", inputDesc.items.map(i => i.label));
         if (!desired.length) return 0;
 
         const grid = inputDesc.grid;
@@ -844,8 +857,16 @@
         // For each desired item (top to bottom), find it and move it to the correct position
         for (let targetPos = 0; targetPos < desired.length; targetPos++) {
             const targetLabel = desired[targetPos];
-            const targetRef = labelToRef[targetLabel];
-            if (!targetRef) continue;
+            const exactMatch = labelToRef[targetLabel];
+            let targetRef = exactMatch;
+            if (!targetRef) {
+                const fuzzy = findSortingItemByLabel(inputDesc.items, targetLabel);
+                if (fuzzy) targetRef = fuzzy.ref;
+            }
+            if (!targetRef) {
+                console.warn("[SAI] sorting: no match for", targetLabel);
+                continue;
+            }
 
             for (let attempt = 0; attempt < 20; attempt++) {
                 const currentCards = Array.from(grid.querySelectorAll('[class*="_SortingListElementCard_"]'));

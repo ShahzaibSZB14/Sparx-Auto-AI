@@ -1,4 +1,4 @@
-![SAIT logo](https://jenstech.qzz.io/cdn/img/Sparx/SparxLogo-128x128.png)
+<img src="cdn/img/logo.png" alt="SAIT logo" width="128" height="128">
 
 # Sparx AI Tools
 
@@ -9,6 +9,11 @@ Sparx AI Tools is a Chrome extension that adds homework help tools to Sparx Read
 > Due to the nature of the sparx science extension controlling your browser
 > to automate question answering, Microsoft Defender may flag the files as
 > a false positive. To solve this, allow it through defender.
+
+> [!CAUTION]
+>
+> This is a work in progress — not everything may work as expected.
+> If you run into issues, please report them so they can be fixed.
 
 ## Modules
 

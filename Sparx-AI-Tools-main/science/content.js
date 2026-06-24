@@ -470,6 +470,9 @@
         const linkBoxes = describeLinkBoxes(partEl);
         if (linkBoxes) return linkBoxes;
 
+        const sorting = describeSorting(partEl);
+        if (sorting) return sorting;
+
         const checkboxTable = describeCheckboxTable(partEl);
         if (checkboxTable) return checkboxTable;
 
@@ -783,6 +786,86 @@
         return filled;
     }
 
+    function getCleanCardText(card) {
+        if (!card) return "";
+        const clone = card.cloneNode(true);
+        clone.querySelectorAll("svg, button, input, [class*='_DragHandle_'], [class*='_ButtonsContainer_']").forEach((el) => el.remove());
+        return (clone.innerText || clone.textContent || "").replace(/\s+/g, " ").trim();
+    }
+
+    function describeSorting(partEl) {
+        const grid = partEl?.querySelector('[class*="_SortingListElementGrid_"]');
+        if (!grid) return null;
+        const cards = Array.from(grid.querySelectorAll('[class*="_SortingListElementCard_"]'));
+        if (!cards.length) return null;
+        const items = cards.map((el) => ({
+            label: getCleanCardText(el),
+            ref: el.getAttribute("data-card-ref") || "",
+            el
+        })).filter((item) => item.label);
+        if (!items.length) return null;
+        const labelEl = grid.querySelector('[class*="_FullHeightLabel_"]');
+        const lowLabel = labelEl ? (labelEl.children[0]?.innerText || "").trim() : "";
+        const highLabel = labelEl ? (labelEl.children[2]?.innerText || "").trim() : "";
+        return { type: "sorting", items, lowLabel, highLabel, grid };
+    }
+
+    function parseSortingAnswer(answerText) {
+        const text = String(answerText || "").trim();
+        return text.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    }
+
+    async function moveSortingItem(card, direction) {
+        const btn = card.querySelector(`button[aria-label="Move ${direction}"]`);
+        if (!btn || btn.disabled || btn.getAttribute("aria-disabled") === "true") return false;
+        btn.scrollIntoView({ block: "center", inline: "center" });
+        await sleep(80 + Math.random() * 80);
+        btn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        await sleep(30 + Math.random() * 30);
+        btn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+        btn.click();
+        await sleep(120 + Math.random() * 100);
+        return true;
+    }
+
+    async function fillSorting(inputDesc, answerText) {
+        const desired = parseSortingAnswer(answerText);
+        if (!desired.length) return 0;
+
+        const grid = inputDesc.grid;
+        if (!grid) return 0;
+
+        // Build a map from label → ref for matching
+        const labelToRef = {};
+        for (const item of inputDesc.items) {
+            labelToRef[item.label] = item.ref;
+        }
+
+        // For each desired item (top to bottom), find it and move it to the correct position
+        for (let targetPos = 0; targetPos < desired.length; targetPos++) {
+            const targetLabel = desired[targetPos];
+            const targetRef = labelToRef[targetLabel];
+            if (!targetRef) continue;
+
+            for (let attempt = 0; attempt < 20; attempt++) {
+                const currentCards = Array.from(grid.querySelectorAll('[class*="_SortingListElementCard_"]'));
+                const currentIdx = currentCards.findIndex((c) => c.getAttribute("data-card-ref") === targetRef);
+                if (currentIdx === -1) break;
+                if (currentIdx === targetPos) break;
+
+                if (currentIdx > targetPos) {
+                    const moved = await moveSortingItem(currentCards[currentIdx], "up");
+                    if (!moved) break;
+                } else {
+                    const moved = await moveSortingItem(currentCards[currentIdx], "down");
+                    if (!moved) break;
+                }
+            }
+        }
+
+        return 1;
+    }
+
     function parseChecklistValues(answerText, rowCount) {
         const rawLines = String(answerText || "")
             .split(/\n|;/)
@@ -920,7 +1003,7 @@
             // Determine how many partNodes this answer should consume.
             // If the current node is choices, always consume exactly 1 regardless of sub-values.
             const firstDesc = describePartInput(partNodes[nodeIdx] || null);
-            const isSingleNodeAnswer = firstDesc?.type === "choices" || firstDesc?.type === "checkboxTable" || firstDesc?.type === "linkBoxes";
+            const isSingleNodeAnswer = firstDesc?.type === "choices" || firstDesc?.type === "checkboxTable" || firstDesc?.type === "linkBoxes" || firstDesc?.type === "sorting";
             const count = isSingleNodeAnswer ? 1 : subValues.length;
 
             for (let j = 0; j < count; j++) {
@@ -964,6 +1047,8 @@
                     filled += await fillCheckboxTable(inputDesc, answerText);
                 } else if (inputDesc?.type === "linkBoxes") {
                     filled += await fillLinkBoxes(inputDesc, answerText);
+                } else if (inputDesc?.type === "sorting") {
+                    filled += await fillSorting(inputDesc, answerText);
                 }
             }
         }
@@ -1446,6 +1531,7 @@
             "- For checklist/table questions with True/False columns, put one line per table row in the exact row order, using only 'True' or 'False' after the row label, e.g. 'A covalent bond is strong: True'.",
             "- For 'Select all correct answers' multiple-choice questions, include every correct option in the same answer string, separated by commas. Do not return only one option unless only one is correct.",
             "- For match-up/linking questions, put one pair per line in the answer string, using the exact left label, then ':', then the exact matching right label, e.g. 'A: Ball and stick model'. Include every left item.",
+            "- For drag-to-reorder / sorting questions (e.g. 'arrange in order of boiling point'), list the items in the correct order from left (lowest) to right (highest), separated by commas, e.g. 'CH4, C2H6, C3H8, C4H10, C5H12'. Use the exact text from each card.",
             imageRefusalRule,
             ...imageGuidance,
             ...(feedbackContext ? [
